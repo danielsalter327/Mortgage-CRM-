@@ -132,22 +132,48 @@ elif page == "🏠 Pipeline":
                             if st.button("Save", key=f"up_{p_id}"):
                                 supabase.table("prospects").update({"stage": ns, "notes": nn}).eq("id", p_id).execute()
                                 st.rerun()
-                        # --- THE FIX: CASCADE DELETE ---
                         if c_d.button("🗑️", key=f"del_{p_id}"):
                             supabase.table("tasks").delete().eq("prospect_id", p_id).execute()
                             supabase.table("prospects").delete().eq("id", p_id).execute()
                             st.rerun()
     except Exception as e: st.error(f"Error loading pipeline: {e}")
 
-# --- PAGE 3: ADD NEW LEAD ---
+# --- PAGE 3: ADD NEW LEAD (WITH COMBINED TASK) ---
 elif page == "➕ Add New Lead":
     st.title("Create New Lead")
     with st.form("new_lead_form", clear_on_submit=True):
+        st.subheader("👤 Lead Information")
         c1, c2 = st.columns(2)
-        n, p = c1.text_input("Full Name"), c2.text_input("Phone")
-        s, note = c1.selectbox("Initial Status", MY_STATUSES), st.text_area("Notes")
-        if st.form_submit_button("Add to Pipeline"):
+        n = c1.text_input("Full Name")
+        p = c2.text_input("Phone Number")
+        s = c1.selectbox("Status", MY_STATUSES)
+        note = st.text_area("Initial Notes")
+        
+        st.markdown("---")
+        st.subheader("📅 Initial Task (Optional)")
+        t_text = st.text_input("Task Description (e.g., 'Initial Follow-up')")
+        t_date = st.date_input("Task Due Date", value=date.today())
+        
+        if st.form_submit_button("Confirm & Add to Pipeline"):
             if n and p:
-                supabase.table("prospects").insert({"name": n, "phone": p, "stage": s, "notes": note}).execute()
-                st.success(f"Added {n}!")
-            else: st.error("Name and Phone required.")
+                # 1. Create Lead
+                lead_resp = supabase.table("prospects").insert({
+                    "name": n, 
+                    "phone": p, 
+                    "stage": s, 
+                    "notes": note
+                }).execute()
+                
+                # 2. If Task text is provided, create task
+                if t_text and lead_resp.data:
+                    new_id = lead_resp.data[0]['id']
+                    supabase.table("tasks").insert({
+                        "prospect_id": new_id,
+                        "task_text": t_text,
+                        "due_date": t_date.isoformat(),
+                        "is_completed": False
+                    }).execute()
+                
+                st.success(f"Successfully added {n}!")
+            else:
+                st.error("Full Name and Phone Number are required.")
