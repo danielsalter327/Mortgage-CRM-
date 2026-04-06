@@ -11,15 +11,9 @@ st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 # --- AVEN-INSPIRED STYLING ---
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #fcfcfc;
-    }
-    h1 {
-        font-weight: 800 !important;
-        color: #1a1a1a !important;
-        letter-spacing: -1px;
-        margin-bottom: 0px !important;
-    }
+    .stApp { background-color: #fcfcfc; }
+    h1 { font-weight: 800 !important; color: #1a1a1a !important; letter-spacing: -1px; margin-bottom: 0px !important; }
+    h4 { margin-top: 2rem !important; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
     .status-card {
         background-color: white;
         padding: 18px;
@@ -28,22 +22,12 @@ st.markdown("""
         margin-bottom: 10px;
         border-left: 5px solid #1a1a1a;
     }
-    .phone-link {
-        color: #007bff !important;
-        text-decoration: none !important;
-        font-weight: 600;
-        font-size: 0.9rem;
-    }
-    .phone-link:hover {
-        text-decoration: underline !important;
-    }
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
-    }
+    .phone-link { color: #007bff !important; text-decoration: none !important; font-weight: 600; font-size: 0.9rem; }
+    .stButton>button { border-radius: 8px; font-weight: 600; }
     </style>
     """, unsafe_allow_html=True)
 
+# THE SOURCE OF TRUTH FOR STATUSES
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
 
 st.title("Mortgage CRM")
@@ -67,7 +51,7 @@ with st.expander("➕ Add New Prospect"):
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# --- SECTION 2: PIPELINE ---
+# --- SECTION 2: PIPELINE (GROUPED VIEW) ---
 search_query = st.text_input("", placeholder="🔍 Search prospects...")
 
 try:
@@ -80,16 +64,16 @@ if prospects:
     if search_query:
         prospects = [p for p in prospects if search_query.lower() in p.get('name', '').lower()]
 
+    # THIS PART RESTORES THE GROUPING
     for s in MY_STATUSES:
         stage_leads = [p for p in prospects if p.get('stage') == s]
         if stage_leads:
-            st.markdown(f"#### {s}")
+            st.markdown(f"#### {s} ({len(stage_leads)})")
             for p in stage_leads:
                 p_id = p.get('id')
                 p_phone = p.get('phone', '')
                 
                 with st.container():
-                    # THE CLICK-TO-CALL CARD
                     st.markdown(f"""
                     <div class="status-card">
                         <div style="font-size: 1.05rem; font-weight: 700;">{p.get('name')}</div>
