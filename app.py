@@ -8,6 +8,9 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage Vault CRM", layout="wide")
 
+# DEFINE YOUR CUSTOM STATUSES HERE
+MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
+
 st.title("🏠 Mortgage Vault CRM")
 st.markdown("---")
 
@@ -17,9 +20,7 @@ with st.expander("➕ Add New Prospect"):
         col1, col2 = st.columns(2)
         name = col1.text_input("Full Name")
         phone = col2.text_input("Phone Number")
-        # Standardized list of stages
-        all_stages = ["New Lead", "Prequalified", "In Processing", "Application"]
-        stage = col1.selectbox("Current Stage", all_stages)
+        stage = col1.selectbox("Current Status", MY_STATUSES)
         notes = st.text_area("Notes")
         
         if st.form_submit_button("Securely Save to Vault"):
@@ -37,7 +38,6 @@ with st.expander("➕ Add New Prospect"):
 # --- SECTION 2: VIEW PIPELINE ---
 st.subheader("Your Active Pipeline")
 
-# Search and Sort Controls
 c_search, c_sort = st.columns([2, 1])
 search_query = c_search.text_input("🔍 Search by Name", "")
 view_mode = c_sort.selectbox("View Mode", ["Group by Status", "All Prospects (Alphabetical)"])
@@ -50,12 +50,11 @@ except Exception as e:
     prospects = []
 
 if prospects:
-    # Filter by search
     if search_query:
         prospects = [p for p in prospects if search_query.lower() in p.get('name', '').lower()]
 
     if view_mode == "Group by Status":
-        for s in ["New Lead", "Prequalified", "In Processing", "Application"]:
+        for s in MY_STATUSES:
             stage_leads = [p for p in prospects if p.get('stage') == s]
             if stage_leads:
                 st.markdown(f"### 📍 {s} ({len(stage_leads)})")
@@ -70,20 +69,24 @@ if prospects:
                             st.rerun()
                         
                         with st.expander("📝 View Notes / Edit"):
-                            new_stage = st.selectbox("Update Status", ["New Lead", "Prequalified", "In Processing", "Application"], 
-                                                     index=["New Lead", "Prequalified", "In Processing", "Application"].index(p.get('stage', 'New Lead')),
-                                                     key=f"edit_stage_{p_id}")
+                            # Logic to handle if a lead has an old status not in the new list
+                            current_s = p.get('stage')
+                            try:
+                                s_index = MY_STATUSES.index(current_s)
+                            except ValueError:
+                                s_index = 0
+                                
+                            new_stage = st.selectbox("Update Status", MY_STATUSES, index=s_index, key=f"edit_stage_{p_id}")
                             new_notes = st.text_area("Notes", value=p.get('notes', ''), key=f"edit_notes_{p_id}")
+                            
                             if st.button("Save Changes", key=f"save_{p_id}"):
                                 supabase.table("prospects").update({"stage": new_stage, "notes": new_notes}).eq("id", p_id).execute()
                                 st.rerun()
     else:
-        # Standard Alphabetical List
         for p in prospects:
             p_id = p.get('id')
             with st.container(border=True):
                 st.write(f"👤 **{p.get('name')}** — {p.get('stage')}")
                 st.markdown(f"📞 [Call {p.get('phone')}](tel:{p.get('phone')})")
-
 else:
     st.info("No prospects found.")
