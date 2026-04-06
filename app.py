@@ -19,7 +19,10 @@ st.markdown("""
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
     
     .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    
+    /* Updated Task Box for more info */
     .task-box { background-color: #fdfdfd; border: 1px solid #eee; border-left: 5px solid #0066ff; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+    .task-status { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
     
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 600; font-size: 1rem; border: 1px solid #eef2ff; padding: 4px 8px; border-radius: 6px; background: #f8faff; }
@@ -36,40 +39,42 @@ st.title("Mortgage CRM")
 # --- SECTION: GLOBAL TASKS ---
 st.subheader("📋 Pending Tasks")
 try:
-    # FETCH TASKS WITH LEAD DATA
-    task_resp = supabase.table("tasks").select("*, prospects(name, phone)").eq("is_completed", False).execute()
+    # FETCH TASKS WITH LEAD DATA (NAME, PHONE, STAGE)
+    task_resp = supabase.table("tasks").select("*, prospects(name, phone, stage)").eq("is_completed", False).execute()
     tasks_data = task_resp.data
     
     if tasks_data:
         for t in tasks_data:
-            # Safely grab prospect info
             p_info = t.get('prospects', {})
             p_name = p_info.get('name', 'General Task')
             p_phone = p_info.get('phone', '')
+            p_stage = p_info.get('stage', 'Unknown')
             raw_phone = "".join(filter(str.isdigit, p_phone))
 
             with st.container():
                 st.markdown(f"""
                     <div class="task-box">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
-                                <span style="font-weight: 700; color: #111;">{p_name}</span>: {t['task_text']}
+                                <div style="font-weight: 700; color: #111;">{p_name}</div>
+                                <div class="task-status">📍 {p_stage}</div>
+                                <div style="margin-top: 8px; color: #444;"><b>Task:</b> {t['task_text']}</div>
                             </div>
-                            <div>
-                                <a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700; margin-right: 15px;">📞 Call</a>
+                            <div style="text-align: right;">
+                                <a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700; font-size: 1rem; display: block; margin-bottom: 5px;">📞 {p_phone}</a>
+                                <span style="font-size: 0.8rem; color: #bbb;">Click to Dialpad</span>
                             </div>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # Mark as Done button
                 if st.button("Complete Task", key=f"done_{t['id']}"):
                     supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                     st.rerun()
     else:
         st.info("No pending tasks. You're all caught up!")
 except Exception as e:
-    st.caption(f"Tasks pending setup: {e}")
+    st.caption(f"Waiting for lead data... (Ensure Foreign Key is saved in Supabase)")
 
 st.markdown("---")
 
@@ -110,7 +115,7 @@ try:
                             }).execute()
                             st.rerun()
                     
-                    with c_edit.expander("Edit"):
+                    with c_edit.expander("Update"):
                         new_s = st.selectbox("Status", MY_STATUSES, index=MY_STATUSES.index(p['stage']), key=f"s_{p_id}")
                         new_n = st.text_area("Notes", value=p['notes'], key=f"n_{p_id}")
                         if st.button("Save", key=f"up_{p_id}"):
