@@ -9,7 +9,7 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- STYLING (Same as before) ---
+# --- STYLING ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -18,11 +18,15 @@ st.markdown("""
     .header-started { color: #28a745; border-bottom: 2px solid #28a745; font-weight: 700; margin-top: 2rem !important; }
     .header-trid { color: #dc3545; border-bottom: 2px solid #dc3545; font-weight: 700; margin-top: 2rem !important; }
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
+    
     .task-box { background-color: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+    .task-future { background-color: #f8f9fa; border: 1px solid #e9ecef; border-left: 6px solid #adb5bd; padding: 12px; border-radius: 8px; margin-bottom: 8px; }
+    
     .task-potential { border-left: 6px solid #E6B800; }
     .task-started { border-left: 6px solid #28a745; }
     .task-trid { border-left: 6px solid #dc3545; }
     .task-processing { border-left: 6px solid #007bff; }
+    
     .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 600; font-size: 1rem; border: 1px solid #eef2ff; padding: 4px 8px; border-radius: 6px; background: #f8faff; }
@@ -50,18 +54,18 @@ with st.expander("➕ CREATE NEW LEAD", expanded=False):
 
 st.markdown("---")
 
-# --- SECTION: SCHEDULED TASKS ---
+# --- SECTION 1: DUE TODAY ---
 st.subheader("📋 Due Today")
 try:
     today_str = date.today().isoformat()
-    # Fetch incomplete tasks that are due today or in the past
-    task_resp = supabase.table("tasks").select("*, prospects(name, phone, stage)").eq("is_completed", False).lte("due_date", today_str).execute()
-    tasks_data = task_resp.data
+    # Fetch incomplete tasks due today or before
+    task_resp = supabase.table("tasks").select("*, prospects(name, phone, stage)").eq("is_completed", False).lte("due_date", today_str).order("due_date").execute()
+    tasks_today = task_resp.data
     
-    if tasks_data:
-        for t in tasks_data:
+    if tasks_today:
+        for t in tasks_today:
             p_info = t.get('prospects', {})
-            p_name, p_phone, p_stage = p_info.get('name', 'General'), p_info.get('phone', ''), p_info.get('stage', 'Potential Lead')
+            p_name, p_phone, p_stage = p_info.get('name', 'Lead'), p_info.get('phone', ''), p_info.get('stage', 'Potential Lead')
             raw_phone = "".join(filter(str.isdigit, p_phone))
             task_css = TASK_COLOR_MAP.get(p_stage, "task-potential")
 
@@ -69,7 +73,7 @@ try:
                 <div class="task-box {task_css}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
-                            <div style="font-weight: 700; color: #111;">{p_name} <small style="color:red;">(Due: {t['due_date']})</small></div>
+                            <div style="font-weight: 700; color: #111;">{p_name} <small style="color:red;">({t['due_date']})</small></div>
                             <div style="font-size: 0.75rem; color: #888;">📍 {p_stage}</div>
                             <div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div>
                         </div>
@@ -81,14 +85,15 @@ try:
                 supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                 st.rerun()
     else:
-        st.info("No tasks due today.")
+        st.info("No immediate tasks.")
 except:
-    st.caption("Syncing calendar...")
+    st.caption("Syncing task engine...")
 
 st.markdown("---")
 
-# --- PIPELINE ---
-search = st.text_input("", placeholder="🔍 Search pipeline...")
+# --- SECTION 2: PIPELINE ---
+st.subheader("🏠 Pipeline")
+search = st.text_input("", placeholder="🔍 Search leads...")
 if 'filter' not in st.session_state: st.session_state.filter = "All"
 f_cols = st.columns(len(MY_STATUSES) + 1)
 if f_cols[0].button("Show All"): st.session_state.filter = "All"
@@ -113,18 +118,11 @@ try:
                     c_task, c_edit, c_del = st.columns([2, 1, 1])
                     with c_task.expander("➕ Schedule Task"):
                         t_text = st.text_input("Task", key=f"t_in_{p_id}")
-                        t_date = st.date_input("When?", value=date.today(), key=f"t_date_{p_id}")
-                        if st.button("Schedule", key=f"t_btn_{p_id}"):
-                            # Inserting the task with the DUE DATE
-                            supabase.table("tasks").insert({
-                                "prospect_id": p_id, 
-                                "task_text": t_text, 
-                                "due_date": t_date.isoformat(),
-                                "is_completed": False
-                            }).execute()
+                        t_date = st.date_input("Date", value=date.today(), key=f"t_date_{p_id}")
+                        if st.button("Set Schedule", key=f"t_btn_{p_id}"):
+                            supabase.table("tasks").insert({"prospect_id": p_id, "task_text": t_text, "due_date": t_date.isoformat(), "is_completed": False}).execute()
                             st.rerun()
                     
-                    # Edit/Delete Logic Same as Before...
                     with c_edit.expander("Update"):
                         ns = st.selectbox("Status", MY_STATUSES, index=MY_STATUSES.index(p['stage']), key=f"s_{p_id}")
                         nn = st.text_area("Notes", value=p['notes'], key=f"n_{p_id}")
@@ -135,4 +133,25 @@ try:
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
 except:
-    st.info("Pipeline empty.")
+    st.info("Pipeline ready.")
+
+st.markdown("---")
+
+# --- SECTION 3: FUTURE TASKS ---
+with st.expander("📅 VIEW UPCOMING SCHEDULE", expanded=False):
+    try:
+        # Fetch tasks due AFTER today
+        future_resp = supabase.table("tasks").select("*, prospects(name, phone)").eq("is_completed", False).gt("due_date", today_str).order("due_date").execute()
+        future_tasks = future_resp.data
+        
+        if future_tasks:
+            for ft in future_tasks:
+                st.markdown(f"""
+                    <div class="task-future">
+                        <b>{ft['due_date']}</b> — {ft.get('prospects', {}).get('name', 'Lead')}: {ft['task_text']}
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.write("No future tasks scheduled.")
+    except:
+        st.write("Upcoming list pending...")
