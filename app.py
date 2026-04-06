@@ -12,29 +12,35 @@ st.title("🏦 Mortgage Vault CRM")
 
 # --- ADD PROSPECT ---
 with st.expander("➕ Add New Prospect"):
-    with st.form("prospect_form"):
-        name = st.text_input("Name")
-        phone = st.text_input("Phone")
-        amount = st.number_input("Loan Amount", step=1000)
-        stage = st.selectbox("Stage", ["New Lead", "Prequalified", "In Processing", "Application"])
+    with st.form("prospect_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        name = col1.text_input("Name")
+        phone = col2.text_input("Phone")
+        amount = col1.number_input("Loan Amount", step=1000)
+        stage = col2.selectbox("Stage", ["New Lead", "Prequalified", "In Processing", "Application"])
+        notes = st.text_area("Notes (Special requirements, follow-up info, etc.)")
         
         if st.form_submit_button("Securely Save"):
-            data = {"name": name, "phone": phone, "amount": amount, "stage": stage}
+            data = {"name": name, "phone": phone, "amount": amount, "stage": stage, "notes": notes}
             supabase.table("prospects").insert(data).execute()
             st.success(f"Saved {name} to the Vault!")
             st.rerun()
 
 # --- VIEW PIPELINE ---
 st.subheader("Your Active Pipeline")
-response = supabase.table("prospects").select("*").execute()
+response = supabase.table("prospects").select("*").order("name").execute()
 prospects = response.data
 
 if prospects:
     for p in prospects:
         with st.container(border=True):
-            col1, col2, col3 = st.columns([2, 2, 1])
-            col1.write(f"**{p['name']}**")
-            col2.markdown(f"📞 [Call {p['phone']}](tel:{p['phone']})")
-            col3.write(f"${p['amount']:,}")
+            c1, c2, c3 = st.columns([2, 2, 1])
+            c1.write(f"**{p['name']}** ({p['stage']})")
+            c2.markdown(f"📞 [Call {p['phone']}](tel:{p['phone']})")
+            c3.write(f"${p['amount']:,}")
+            
+            # Show notes if they exist
+            if p.get('notes'):
+                st.caption(f"📝 **Notes:** {p['notes']}")
 else:
     st.info("No prospects in the vault yet.")
