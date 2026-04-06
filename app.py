@@ -26,27 +26,28 @@ with st.expander("➕ Add New Prospect"):
             st.success(f"Saved {name} to the Vault!")
             st.rerun()
 
-# --- VIEW PIPELINE ---
+# --- VIEW PIPELINE (Safety Version) ---
 st.subheader("Your Active Pipeline")
-# We fetch 'id' now so we know exactly which one to delete
 response = supabase.table("prospects").select("*").order("name").execute()
 prospects = response.data
 
 if prospects:
     for p in prospects:
         with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
+            # We use .get() to avoid the KeyError crash
+            p_id = p.get('id')
             
+            c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
             c1.write(f"**{p['name']}** ({p['stage']})")
             c2.markdown(f"📞 [Call {p['phone']}](tel:{p['phone']})")
             c3.write(f"${p['amount']:,}")
             
-            # THE DELETE FUNCTION
-            # We use the unique 'id' from Supabase to ensure we delete the right person
-            if c4.button("🗑️ Delete", key=f"delete_{p['id']}"):
-                supabase.table("prospects").delete().eq("id", p["id"]).execute()
-                st.warning(f"Removed {p['name']} from the Vault.")
-                st.rerun()
+            # Only show delete button if the lead has a valid ID
+            if p_id:
+                if c4.button("🗑️ Delete", key=f"delete_{p_id}"):
+                    supabase.table("prospects").delete().eq("id", p_id).execute()
+                    st.warning(f"Removed {p['name']}.")
+                    st.rerun()
             
             if p.get('notes'):
                 st.caption(f"📝 **Notes:** {p['notes']}")
