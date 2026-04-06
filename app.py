@@ -31,18 +31,23 @@ st.markdown("""
         align-items: center;
     }
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
-    .phone-link { color: #0066ff !important; text-decoration: none !important; font-size: 0.9rem; }
-    .notes-box { color: #555; font-size: 0.95rem; flex-grow: 1; border-left: 1px solid #eee; margin-left: 20px; padding-left: 20px; }
-    
-    /* Filter Button Styling */
-    div[data-testid="stHorizontalBlock"] button {
-        border-radius: 20px !important;
+    /* Blue link style for DialPad clickability */
+    .phone-link { 
+        color: #0066ff !important; 
+        text-decoration: none !important; 
+        font-size: 1rem; 
+        font-weight: 600;
+        border: 1px solid #eef2ff;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: #f8faff;
     }
+    .phone-link:hover { background: #0066ff; color: white !important; }
+    .notes-box { color: #555; font-size: 0.95rem; flex-grow: 1; border-left: 1px solid #eee; margin-left: 20px; padding-left: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
-# Mapping internal names to CSS classes
 COLOR_MAP = {
     "Potential Lead": "header-potential",
     "Started Application": "header-started",
@@ -68,17 +73,12 @@ with st.expander("➕ Create New Record"):
 # --- SECTION 2: ONE-CLICK FILTERS ---
 st.write("### Filter Pipeline")
 filter_cols = st.columns(len(MY_STATUSES) + 1)
-
-# "All" button
 if filter_cols[0].button("Show All", use_container_width=True):
     st.session_state.filter = "All"
-
-# Status buttons
 for i, status in enumerate(MY_STATUSES):
     if filter_cols[i+1].button(status, use_container_width=True):
         st.session_state.filter = status
 
-# Initialize filter state if not set
 if 'filter' not in st.session_state:
     st.session_state.filter = "All"
 
@@ -91,48 +91,20 @@ except:
     data = []
 
 if data:
-    # Apply Search Filter
     if search:
         data = [p for p in data if search.lower() in p.get('name','').lower()]
 
-    # Apply Status Filter
     active_filter = st.session_state.filter
     
     for s in MY_STATUSES:
-        # If a filter is active, skip any status that doesn't match
         if active_filter != "All" and active_filter != s:
             continue
             
         leads = [p for p in data if p.get('stage') == s]
         if leads:
-            # Use the color-coded CSS classes
             css_class = COLOR_MAP.get(s, "")
             st.markdown(f'<div class="{css_class}">{s.upper()} ({len(leads)})</div>', unsafe_allow_html=True)
             
             for p in leads:
                 p_id = p.get('id')
-                with st.container():
-                    st.markdown(f"""
-                        <div class="crm-card">
-                            <div style="min-width: 180px;">
-                                <div class="name-text">{p.get('name')}</div>
-                                <a href="tel:{p.get('phone')}" class="phone-link">📞 {p.get('phone')}</a>
-                            </div>
-                            <div class="notes-box">
-                                {p.get('notes') if p.get('notes') else '<span style="color:#ccc">No notes recorded.</span>'}
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    edit_col, del_col, spacer = st.columns([1, 1, 6])
-                    with edit_col.expander("Update"):
-                        new_s = st.selectbox("Status", MY_STATUSES, index=MY_STATUSES.index(p.get('stage')), key=f"s_{p_id}")
-                        new_n = st.text_area("Notes", value=p.get('notes',''), key=f"n_{p_id}")
-                        if st.button("Save Changes", key=f"up_{p_id}"):
-                            supabase.table("prospects").update({"stage": new_s, "notes": new_n}).eq("id", p_id).execute()
-                            st.rerun()
-                    if del_col.button("🗑️", key=f"del_{p_id}"):
-                        supabase.table("prospects").delete().eq("id", p_id).execute()
-                        st.rerun()
-else:
-    st.info("Pipeline is empty.")
+                # Clean phone number for
