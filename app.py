@@ -8,22 +8,27 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- STYLING ---
+# --- STYLING (Now with Dynamic Task Colors) ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
     h1 { font-weight: 800 !important; color: #111; letter-spacing: -1.5px; }
+    
+    /* Header Colors */
     .header-potential { color: #E6B800; border-bottom: 2px solid #E6B800; font-weight: 700; margin-top: 2rem !important; }
     .header-started { color: #28a745; border-bottom: 2px solid #28a745; font-weight: 700; margin-top: 2rem !important; }
     .header-trid { color: #dc3545; border-bottom: 2px solid #dc3545; font-weight: 700; margin-top: 2rem !important; }
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
     
-    .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    /* Dynamic Task Box Styles */
+    .task-box { background-color: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+    .task-potential { border-left: 6px solid #E6B800; }
+    .task-started { border-left: 6px solid #28a745; }
+    .task-trid { border-left: 6px solid #dc3545; }
+    .task-processing { border-left: 6px solid #007bff; }
     
-    /* Updated Task Box for more info */
-    .task-box { background-color: #fdfdfd; border: 1px solid #eee; border-left: 5px solid #0066ff; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
     .task-status { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-    
+    .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 600; font-size: 1rem; border: 1px solid #eef2ff; padding: 4px 8px; border-radius: 6px; background: #f8faff; }
     .notes-box { color: #555; font-size: 0.95rem; flex-grow: 1; border-left: 1px solid #eee; margin-left: 20px; padding-left: 20px; }
@@ -32,14 +37,28 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
-COLOR_MAP = {"Potential Lead": "header-potential", "Started Application": "header-started", "Trid Triggered": "header-trid", "In Processing": "header-processing"}
+
+# Map statuses to CSS classes
+COLOR_MAP = {
+    "Potential Lead": "header-potential",
+    "Started Application": "header-started",
+    "Trid Triggered": "header-trid",
+    "In Processing": "header-processing"
+}
+
+# Map statuses to Task Border classes
+TASK_COLOR_MAP = {
+    "Potential Lead": "task-potential",
+    "Started Application": "task-started",
+    "Trid Triggered": "task-trid",
+    "In Processing": "task-processing"
+}
 
 st.title("Mortgage CRM")
 
 # --- SECTION: GLOBAL TASKS ---
 st.subheader("📋 Pending Tasks")
 try:
-    # FETCH TASKS WITH LEAD DATA (NAME, PHONE, STAGE)
     task_resp = supabase.table("tasks").select("*, prospects(name, phone, stage)").eq("is_completed", False).execute()
     tasks_data = task_resp.data
     
@@ -48,12 +67,15 @@ try:
             p_info = t.get('prospects', {})
             p_name = p_info.get('name', 'General Task')
             p_phone = p_info.get('phone', '')
-            p_stage = p_info.get('stage', 'Unknown')
+            p_stage = p_info.get('stage', 'Potential Lead') # Default
             raw_phone = "".join(filter(str.isdigit, p_phone))
+            
+            # Get the correct color class
+            task_css = TASK_COLOR_MAP.get(p_stage, "task-potential")
 
             with st.container():
                 st.markdown(f"""
-                    <div class="task-box">
+                    <div class="task-box {task_css}">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
                                 <div style="font-weight: 700; color: #111;">{p_name}</div>
@@ -62,7 +84,6 @@ try:
                             </div>
                             <div style="text-align: right;">
                                 <a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700; font-size: 1rem; display: block; margin-bottom: 5px;">📞 {p_phone}</a>
-                                <span style="font-size: 0.8rem; color: #bbb;">Click to Dialpad</span>
                             </div>
                         </div>
                     </div>
@@ -72,9 +93,9 @@ try:
                     supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                     st.rerun()
     else:
-        st.info("No pending tasks. You're all caught up!")
-except Exception as e:
-    st.caption(f"Waiting for lead data... (Ensure Foreign Key is saved in Supabase)")
+        st.info("No pending tasks.")
+except Exception:
+    st.caption("Tasks pending setup...")
 
 st.markdown("---")
 
@@ -108,11 +129,7 @@ try:
                     with c_task.expander("➕ Add Task"):
                         t_text = st.text_input("Task detail", key=f"t_in_{p_id}")
                         if st.button("Save Task", key=f"t_btn_{p_id}"):
-                            supabase.table("tasks").insert({
-                                "prospect_id": p_id, 
-                                "task_text": t_text, 
-                                "is_completed": False
-                            }).execute()
+                            supabase.table("tasks").insert({"prospect_id": p_id, "task_text": t_text, "is_completed": False}).execute()
                             st.rerun()
                     
                     with c_edit.expander("Update"):
@@ -125,5 +142,5 @@ try:
                     if c_del.button("🗑️", key=f"del_{p_id}"):
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
-except Exception as e:
-    st.info("Pipeline is ready.")
+except:
+    st.info("Pipeline is empty.")
