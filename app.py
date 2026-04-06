@@ -1,59 +1,40 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-import pandas as pd
+from supabase import create_client, Client
 
-st.set_page_config(page_title="Mortgage Pro CRM", layout="wide")
+# 1. Setup Database Connection
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-# Connect to Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+st.set_page_config(page_title="Mortgage Vault CRM", layout="wide")
 
-# Fetch data (clearing cache so it's always fresh)
-df = conn.read(ttl=0)
+st.title("🏦 Mortgage Vault CRM")
 
-st.title("🏠 Mortgage Prospect Manager")
-
-# --- ACTION TABS ---
-tab1, tab2 = st.tabs(["➕ Add New Prospect", "📋 View & Call Pipeline"])
-
-with tab1:
-    with st.form("add_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        name = col1.text_input("Full Name")
-        phone = col2.text_input("Phone Number (e.g. 555-123-4567)")
-        amount = col1.number_input("Loan Amount", min_value=0, step=5000)
-        stage = col2.selectbox("Stage", ["New Lead", "Prequalified", "In Processing", "Application Submitted"])
+# --- ADD PROSPECT ---
+with st.expander("➕ Add New Prospect"):
+    with st.form("prospect_form"):
+        name = st.text_input("Name")
+        phone = st.text_input("Phone")
+        amount = st.number_input("Loan Amount", step=1000)
+        stage = st.selectbox("Stage", ["New Lead", "Prequalified", "In Processing", "Application"])
         
-        if st.form_submit_button("Save Prospect"):
-            if name and phone:
-                new_data = pd.DataFrame([{"Name": name, "Phone": phone, "Loan Amount": amount, "Stage": stage}])
-                updated_df = pd.concat([df, new_data], ignore_index=True)
-                conn.update(data=updated_df)
-                st.success(f"Added {name} to the database!")
-                st.rerun()
-            else:
-                st.error("Please provide at least a Name and Phone Number.")
+        if st.form_submit_button("Securely Save"):
+            data = {"name": name, "phone": phone, "amount": amount, "stage": stage}
+            supabase.table("prospects").insert(data).execute()
+            st.success(f"Saved {name} to the Vault!")
+            st.rerun()
 
-with tab2:
-    # Search Filter
-    search = st.text_input("🔍 Search by Name", "")
-    
-    # Filter the dataframe
-    if search:
-        display_df = df[df['Name'].str.contains(search, case=False, na=False)]
-    else:
-        display_df = df
+# --- VIEW PIPELINE ---
+st.subheader("Your Active Pipeline")
+response = supabase.table("prospects").select("*").execute()
+prospects = response.data
 
-    # Display Leads with "Click-to-Call" links
-    for index, row in display_df.iterrows():
-        with st.expander(f"{row['Name']} — {row['Stage']}"):
-            c1, c2, c3 = st.columns([2, 2, 1])
-            c1.write(f"**Loan:** ${row['Loan Amount']:,}")
-            
-            # This creates a link that opens the phone dialer
-            phone_url = f"tel:{row['Phone']}"
-            c2.markdown(f"📞 [Call {row['Phone']}]({phone_url})")
-            
-            if c3.button("Delete", key=f"del_{index}"):
-                df = df.drop(index)
-                conn.update(data=df)
-                st.rerun()
+if prospects:
+    for p in prospects:
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([2, 2, 1])
+            col1.write(f"**{p['name']}**")
+            col2.markdown(f"📞 [Call {p['phone']}](tel:{p['phone']})")
+            col3.write(f"${p['amount']:,}")
+else:
+    st.info("No prospects in the vault yet.")
