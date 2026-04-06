@@ -55,26 +55,40 @@ if page == "📋 Tasks":
     t_today, t_upcoming = st.tabs(["Due Today / Overdue", "Upcoming Schedule"])
     today_str = date.today().isoformat()
 
+    # Shared Logic for Task Display with Note Editing
+    def display_task_list(data_list, is_today=True):
+        for t in data_list:
+            p = t.get('prospects', {})
+            p_id = p.get('id')
+            task_css = TASK_COLOR_MAP.get(p.get('stage'), "task-potential") if is_today else "task-future-bar"
+            raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
+            
+            with st.container():
+                st.markdown(f"""<div class="task-box {task_css}"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700; color: #111;">{p.get('name')} <span style="color:{'red' if is_today else '#666'}; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div style="font-size: 0.75rem; color: #888;">📍 {p.get('stage')}</div><div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
+                
+                col1, col2 = st.columns([2, 4])
+                with col1.expander("✅ Complete & Update Note"):
+                    current_notes = p.get('notes', '')
+                    updated_note = st.text_area("Update Lead Notes:", value=current_notes, key=f"note_up_{t['id']}")
+                    if st.button("Finalize Completion", key=f"btn_comp_{t['id']}"):
+                        # 1. Update the Prospect's Notes
+                        supabase.table("prospects").update({"notes": updated_note}).eq("id", p_id).execute()
+                        # 2. Mark the Task as Completed
+                        supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
+                        st.success("Note saved and task archived!")
+                        st.rerun()
+                
+                with col2.expander("Quick View Details"):
+                    st.write(f"**Current Lead Notes:** {p.get('notes', 'None')}")
+
     with t_today:
         task_resp = supabase.table("tasks").select("*, prospects(*)").eq("is_completed", False).lte("due_date", today_str).order("due_date").execute()
         if task_resp.data:
-            for t in task_resp.data:
-                p = t.get('prospects', {})
-                task_css = TASK_COLOR_MAP.get(p.get('stage'), "task-potential")
-                raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
-                with st.container():
-                    st.markdown(f"""<div class="task-box {task_css}"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700; color: #111;">{p.get('name')} <span style="color:red; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div style="font-size: 0.75rem; color: #888;">📍 {p.get('stage')}</div><div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
-                    c1, c2 = st.columns([1, 5])
-                    if c1.button("Complete", key=f"d_tod_{t['id']}"):
-                        supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
-                        st.rerun()
-                    with c2.expander("View Lead Details"):
-                        st.write(f"**Lead Notes:** {p.get('notes', 'None')}")
+            display_task_list(task_resp.data, is_today=True)
         else:
             st.info("No tasks due today.")
 
     with t_upcoming:
-        # --- NEW DATE FILTER FOR UPCOMING ---
         col_f1, col_f2 = st.columns([2, 3])
         filter_date = col_f1.date_input("Filter by Date:", value=None, min_value=date.today() + timedelta(days=1))
         
@@ -83,23 +97,12 @@ if page == "📋 Tasks":
             query = query.eq("due_date", filter_date.isoformat())
         
         future_resp = query.execute()
-        
         if future_resp.data:
-            for t in future_resp.data:
-                p = t.get('prospects', {})
-                raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
-                with st.container():
-                    st.markdown(f"""<div class="task-box task-future-bar"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700;">{p.get('name')} <span style="color:#666; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
-                    c_f1, c_f2 = st.columns([1, 5])
-                    if c_f1.button("Complete", key=f"d_fut_{t['id']}"):
-                        supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
-                        st.rerun()
-                    with c_f2.expander("Details"):
-                        st.write(f"**Status:** {p.get('stage')} | **Notes:** {p.get('notes', 'None')}")
+            display_task_list(future_resp.data, is_today=False)
         else:
-            st.info("No upcoming tasks found for this selection.")
+            st.info("No upcoming tasks found.")
 
-# --- PAGE 2: PIPELINE (Unchanged) ---
+# --- PAGE 2 & 3 (Pipeline and Add Lead remain the same as previous stable version) ---
 elif page == "🏠 Pipeline":
     st.title("Mortgage Pipeline")
     search = st.text_input("", placeholder="🔍 Search leads...")
@@ -140,7 +143,6 @@ elif page == "🏠 Pipeline":
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
 
-# --- PAGE 3: ADD NEW LEAD (Unchanged) ---
 elif page == "➕ Add New Lead":
     st.title("Create New Lead")
     with st.form("new_lead_form", clear_on_submit=True):
@@ -151,5 +153,3 @@ elif page == "➕ Add New Lead":
             if n and p:
                 supabase.table("prospects").insert({"name": n, "phone": p, "stage": s, "notes": note}).execute()
                 st.success(f"Added {n}!")
-            else:
-                st.error("Name and Phone required.")
