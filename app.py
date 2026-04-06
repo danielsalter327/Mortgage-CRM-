@@ -8,7 +8,7 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- CUSTOM AVEN STYLING ---
+# --- STYLE ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -17,7 +17,6 @@ st.markdown("""
     .header-started { color: #28a745; border-bottom: 2px solid #28a745; font-weight: 700; margin-top: 2rem !important; }
     .header-trid { color: #dc3545; border-bottom: 2px solid #dc3545; font-weight: 700; margin-top: 2rem !important; }
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
-    
     .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 600; font-size: 1rem; border: 1px solid #eef2ff; padding: 4px 8px; border-radius: 6px; background: #f8faff; }
@@ -34,7 +33,7 @@ st.title("Mortgage CRM")
 # --- SECTION: GLOBAL TASKS ---
 st.subheader("📋 Pending Tasks")
 try:
-    # SIMPLE FETCH: Just get the tasks. No fancy joins.
+    # We fetch only incomplete tasks
     task_resp = supabase.table("tasks").select("*").eq("is_completed", False).execute()
     tasks_data = task_resp.data
     
@@ -42,43 +41,29 @@ try:
         for t in tasks_data:
             with st.container(border=True):
                 col_t, col_b = st.columns([5, 1])
-                # Show the task. We'll add the name back once we know this works.
-                col_t.markdown(f"🔔 **ACTION REQUIRED:** {t['task_text']}")
-                
+                col_t.markdown(f"🔔 **ACTION:** {t['task_text']}")
                 if col_b.button("Done", key=f"done_{t['id']}"):
                     supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                     st.rerun()
     else:
         st.info("No pending tasks. You're all caught up!")
 except Exception as e:
-    # If this shows up, the table name 'tasks' is likely spelled wrong in Supabase
-    st.error(f"CRM could not find your 'tasks' table. Error: {e}")
+    st.error(f"Task Table Error: {e}")
 
 st.markdown("---")
 
-# --- ADD NEW PROSPECT ---
-with st.expander("➕ Create New Record"):
-    with st.form("new_lead", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        name, phone = c1.text_input("Name"), c2.text_input("Phone")
-        stage, notes = c1.selectbox("Status", MY_STATUSES), st.text_area("Initial Notes")
-        if st.form_submit_button("Confirm Entry"):
-            if name and phone:
-                supabase.table("prospects").insert({"name": name, "phone": phone, "stage": stage, "notes": notes}).execute()
-                st.rerun()
-
-# --- PIPELINE ---
-search = st.text_input("", placeholder="🔍 Search by name...")
+# --- PIPELINE FILTERS ---
 if 'filter' not in st.session_state: st.session_state.filter = "All"
 f_cols = st.columns(len(MY_STATUSES) + 1)
 if f_cols[0].button("Show All"): st.session_state.filter = "All"
 for i, s in enumerate(MY_STATUSES):
     if f_cols[i+1].button(s): st.session_state.filter = s
 
+# --- PIPELINE DATA ---
+search = st.text_input("", placeholder="🔍 Search by name...")
+
 try:
-    resp = supabase.table("prospects").select("*").order("name").execute()
-    data = resp.data
-    
+    data = supabase.table("prospects").select("*").order("name").execute().data
     if search:
         data = [p for p in data if search.lower() in p.get('name', '').lower()]
     
@@ -94,14 +79,18 @@ try:
                     st.markdown(f'<div class="crm-card"><div style="min-width: 180px;"><div class="name-text">{p["name"]}</div><a href="tel:{raw_phone}" class="phone-link">📞 {p["phone"]}</a></div><div class="notes-box">{p["notes"] if p["notes"] else "..." }</div></div>', unsafe_allow_html=True)
                     
                     c_task, c_edit, c_del = st.columns([2, 1, 1])
-                    with c_task.expander("➕ Task"):
-                        t_text = st.text_input("What's next?", key=f"t_in_{p_id}")
-                        if st.button("Set", key=f"t_btn_{p_id}"):
-                            # Inserting the task into Supabase
-                            supabase.table("tasks").insert({"prospect_id": p_id, "task_text": t_text, "is_completed": False}).execute()
+                    with c_task.expander("➕ Add Task"):
+                        t_text = st.text_input("What needs to happen?", key=f"t_in_{p_id}")
+                        if st.button("Set Task", key=f"t_btn_{p_id}"):
+                            # FORCE 'is_completed' to False here
+                            supabase.table("tasks").insert({
+                                "prospect_id": p_id, 
+                                "task_text": t_text, 
+                                "is_completed": False
+                            }).execute()
                             st.rerun()
                     
-                    with c_edit.expander("Update"):
+                    with c_edit.expander("Edit"):
                         new_s = st.selectbox("Status", MY_STATUSES, index=MY_STATUSES.index(p['stage']), key=f"s_{p_id}")
                         new_n = st.text_area("Notes", value=p['notes'], key=f"n_{p_id}")
                         if st.button("Save", key=f"up_{p_id}"):
@@ -111,5 +100,5 @@ try:
                     if c_del.button("🗑️", key=f"del_{p_id}"):
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
-except Exception as e:
-    st.info("Pipeline is ready for data.")
+except:
+    st.info("Pipeline is empty.")
