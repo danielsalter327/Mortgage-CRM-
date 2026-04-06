@@ -8,7 +8,7 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- AVEN-INSPIRED STYLING (Corrected) ---
+# --- AVEN-INSPIRED STYLING ---
 st.markdown("""
     <style>
     .stApp {
@@ -20,41 +20,32 @@ st.markdown("""
         letter-spacing: -1px;
         margin-bottom: 0px !important;
     }
-    .stCaption {
-        margin-bottom: 20px !important;
-    }
     .status-card {
         background-color: white;
         padding: 18px;
         border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         margin-bottom: 10px;
         border-left: 5px solid #1a1a1a;
-        line-height: 1.4;
+    }
+    .phone-link {
+        color: #007bff !important;
+        text-decoration: none !important;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .phone-link:hover {
+        text-decoration: underline !important;
     }
     .stButton>button {
         border-radius: 8px;
-        border: 1px solid #e0e0e0;
-        background-color: white;
-        color: #1a1a1a;
         font-weight: 600;
-    }
-    .stButton>button:hover {
-        border-color: #1a1a1a;
-        background-color: #1a1a1a;
-        color: white;
-    }
-    /* Simple fix for expander styling */
-    .streamlit-expanderHeader {
-        border-radius: 8px !important;
-        border: 1px solid #eee !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
 
-# Header
 st.title("Mortgage CRM")
 st.caption("Secure Pipeline Management")
 
@@ -77,9 +68,7 @@ with st.expander("➕ Add New Prospect"):
                     st.error(f"Error: {e}")
 
 # --- SECTION 2: PIPELINE ---
-c_search, c_sort = st.columns([2, 1])
-search_query = c_search.text_input("", placeholder="🔍 Search prospects...")
-view_mode = c_sort.selectbox("Layout", ["Group by Status", "List View"])
+search_query = st.text_input("", placeholder="🔍 Search prospects...")
 
 try:
     response = supabase.table("prospects").select("*").order("name").execute()
@@ -91,39 +80,35 @@ if prospects:
     if search_query:
         prospects = [p for p in prospects if search_query.lower() in p.get('name', '').lower()]
 
-    if view_mode == "Group by Status":
-        for s in MY_STATUSES:
-            stage_leads = [p for p in prospects if p.get('stage') == s]
-            if stage_leads:
-                st.markdown(f"#### {s}")
-                for p in stage_leads:
-                    p_id = p.get('id')
-                    with st.container():
-                        st.markdown(f"""
-                        <div class="status-card">
-                            <div style="font-size: 1.05rem; font-weight: 700;">{p.get('name')}</div>
-                            <div style="color: #666; font-size: 0.85rem;">📞 {p.get('phone')}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        col_edit, col_del = st.columns([5, 1])
-                        with col_edit.expander("View details & edit"):
-                            # Safety check for status index
-                            cur_stage = p.get('stage')
-                            s_idx = MY_STATUSES.index(cur_stage) if cur_stage in MY_STATUSES else 0
-                            
-                            new_stage = st.selectbox("Status", MY_STATUSES, index=s_idx, key=f"s_{p_id}")
-                            new_notes = st.text_area("Notes", value=p.get('notes', ''), key=f"n_{p_id}")
-                            if st.button("Update", key=f"up_{p_id}"):
-                                supabase.table("prospects").update({"stage": new_stage, "notes": new_notes}).eq("id", p_id).execute()
-                                st.rerun()
-                        
-                        if col_del.button("🗑️", key=f"del_{p_id}"):
-                            supabase.table("prospects").delete().eq("id", p_id).execute()
+    for s in MY_STATUSES:
+        stage_leads = [p for p in prospects if p.get('stage') == s]
+        if stage_leads:
+            st.markdown(f"#### {s}")
+            for p in stage_leads:
+                p_id = p.get('id')
+                p_phone = p.get('phone', '')
+                
+                with st.container():
+                    # THE CLICK-TO-CALL CARD
+                    st.markdown(f"""
+                    <div class="status-card">
+                        <div style="font-size: 1.05rem; font-weight: 700;">{p.get('name')}</div>
+                        <a href="tel:{p_phone}" class="phone-link">📞 {p_phone}</a>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    col_edit, col_del = st.columns([5, 1])
+                    with col_edit.expander("View details & edit"):
+                        cur_stage = p.get('stage')
+                        s_idx = MY_STATUSES.index(cur_stage) if cur_stage in MY_STATUSES else 0
+                        new_stage = st.selectbox("Status", MY_STATUSES, index=s_idx, key=f"s_{p_id}")
+                        new_notes = st.text_area("Notes", value=p.get('notes', ''), key=f"n_{p_id}")
+                        if st.button("Update", key=f"up_{p_id}"):
+                            supabase.table("prospects").update({"stage": new_stage, "notes": new_notes}).eq("id", p_id).execute()
                             st.rerun()
-    else:
-        for p in prospects:
-            st.write(f"**{p.get('name')}** — {p.get('stage')}")
-
+                    
+                    if col_del.button("🗑️", key=f"del_{p_id}"):
+                        supabase.table("prospects").delete().eq("id", p_id).execute()
+                        st.rerun()
 else:
     st.info("No active prospects.")
