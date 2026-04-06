@@ -25,7 +25,7 @@ st.markdown("""
         transition: transform 0.2s, box-shadow 0.2s;
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
     }
     .crm-card:hover {
         box-shadow: 0 10px 20px rgba(0,0,0,0.05);
@@ -33,18 +33,18 @@ st.markdown("""
     
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; margin-bottom: 4px; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 500; font-size: 0.9rem; }
-    .notes-box { color: #666; font-size: 0.95rem; line-height: 1.5; padding: 0 30px; flex-grow: 1; border-left: 1px solid #eee; margin-left: 20px; }
+    .notes-box { color: #555; font-size: 0.95rem; line-height: 1.5; padding: 0 30px; flex-grow: 1; border-left: 1px solid #eee; margin-left: 20px; }
     
-    /* Clean up Streamlit's default padding */
-    [data-testid="stVerticalBlock"] > div { padding: 0px !important; }
-    .stExpander { border: none !important; box-shadow: none !important; background: transparent !important; }
+    /* Formatting Action Row */
+    .stButton>button { border-radius: 8px; font-weight: 600; width: 100%; border: 1px solid #eee; }
+    .stExpander { border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
 
 st.title("Mortgage CRM")
-st.caption("v2.0 | Aven-Style Precision")
+st.caption("Secure Pipeline Management • Fintech Edition")
 
 # --- ADD NEW PROSPECT ---
 with st.expander("➕ Create New Record"):
@@ -68,5 +68,38 @@ except:
     data = []
 
 if data:
+    # FIXED LINE 72 HERE
     if search:
-        data = [p for p in data if search.lower() in p.get('name','
+        data = [p for p in data if search.lower() in p.get('name','').lower()]
+
+    for s in MY_STATUSES:
+        leads = [p for p in data if p.get('stage') == s]
+        if leads:
+            st.markdown(f"#### {s} • {len(leads)}")
+            for p in leads:
+                p_id = p.get('id')
+                with st.container():
+                    st.markdown(f"""
+                        <div class="crm-card">
+                            <div style="min-width: 180px;">
+                                <div class="name-text">{p.get('name')}</div>
+                                <a href="tel:{p.get('phone')}" class="phone-link">📞 {p.get('phone')}</a>
+                            </div>
+                            <div class="notes-box">
+                                {p.get('notes') if p.get('notes') else '<span style="color:#ccc">No notes recorded.</span>'}
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    edit_col, del_col, spacer = st.columns([1, 1, 6])
+                    with edit_col.expander("Edit"):
+                        new_s = st.selectbox("Status", MY_STATUSES, index=MY_STATUSES.index(p.get('stage')), key=f"s_{p_id}")
+                        new_n = st.text_area("Notes", value=p.get('notes',''), key=f"n_{p_id}")
+                        if st.button("Save Changes", key=f"up_{p_id}"):
+                            supabase.table("prospects").update({"stage": new_s, "notes": new_n}).eq("id", p_id).execute()
+                            st.rerun()
+                    if del_col.button("🗑️", key=f"del_{p_id}"):
+                        supabase.table("prospects").delete().eq("id", p_id).execute()
+                        st.rerun()
+else:
+    st.info("Pipeline is empty.")
