@@ -2,8 +2,8 @@ import streamlit as st
 from supabase import create_client, Client
 
 # 1. Setup Database Connection
-url = st.secrets["https://qbhbblvcsqcdpgkntbgr.supabase.co"]
-key = st.secrets["sb_publishable_q8-8m37bvmgbuyNhfsqxeQ_y7uCr4TQ"]
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage Vault CRM", layout="wide")
