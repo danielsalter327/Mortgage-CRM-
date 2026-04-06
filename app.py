@@ -9,24 +9,10 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- GLOBAL SETTINGS (Moved here to fix NameError) ---
+# --- GLOBAL SETTINGS ---
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
-
-# Colors for Pipeline Headers
-COLOR_MAP = {
-    "Potential Lead": "header-potential",
-    "Started Application": "header-started",
-    "Trid Triggered": "header-trid",
-    "In Processing": "header-processing"
-}
-
-# Colors for Task Borders
-TASK_COLOR_MAP = {
-    "Potential Lead": "task-potential",
-    "Started Application": "task-started",
-    "Trid Triggered": "task-trid",
-    "In Processing": "task-processing"
-}
+COLOR_MAP = {"Potential Lead": "header-potential", "Started Application": "header-started", "Trid Triggered": "header-trid", "In Processing": "header-processing"}
+TASK_COLOR_MAP = {"Potential Lead": "task-potential", "Started Application": "task-started", "Trid Triggered": "task-trid", "In Processing": "task-processing"}
 
 # --- SHARED STYLING ---
 st.markdown("""
@@ -37,14 +23,12 @@ st.markdown("""
     .header-started { color: #28a745; border-bottom: 2px solid #28a745; font-weight: 700; margin-top: 2rem !important; }
     .header-trid { color: #dc3545; border-bottom: 2px solid #dc3545; font-weight: 700; margin-top: 2rem !important; }
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
-    
     .task-box { background-color: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
     .task-potential { border-left: 6px solid #E6B800; }
     .task-started { border-left: 6px solid #28a745; }
     .task-trid { border-left: 6px solid #dc3545; }
     .task-processing { border-left: 6px solid #007bff; }
     .task-future-bar { border-left: 6px solid #adb5bd; }
-    
     .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 600; font-size: 1rem; border: 1px solid #eef2ff; padding: 4px 8px; border-radius: 6px; background: #f8faff; }
@@ -76,10 +60,8 @@ if page == "📋 Tasks":
             p_id = p.get('id')
             task_css = TASK_COLOR_MAP.get(p.get('stage'), "task-potential") if is_today else "task-future-bar"
             raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
-            
             with st.container():
                 st.markdown(f"""<div class="task-box {task_css}"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700; color: #111;">{p.get('name')} <span style="color:{'red' if is_today else '#666'}; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div style="font-size: 0.75rem; color: #888;">📍 {p.get('stage')}</div><div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone', 'No Phone')}</a></div></div>""", unsafe_allow_html=True)
-                
                 col1, col2 = st.columns([2, 4])
                 with col1.expander("✅ Complete & Schedule Next"):
                     updated_note = st.text_area("Update Lead Notes:", value=p.get('notes', ''), key=f"note_up_{t['id']}")
@@ -88,15 +70,14 @@ if page == "📋 Tasks":
                         c1, c2 = st.columns(2)
                         next_task = c1.text_input("Next Task:", value="Follow up call", key=f"fup_txt_{t['id']}")
                         next_date = c2.date_input("When?", value=date.today() + timedelta(days=1), key=f"fup_date_{t['id']}")
-                    
                     if st.button("Complete & Save", key=f"btn_comp_{t['id']}"):
                         supabase.table("prospects").update({"notes": updated_note}).eq("id", p_id).execute()
                         supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                         if do_follow_up:
                             supabase.table("tasks").insert({"prospect_id": p_id, "task_text": next_task, "due_date": next_date.isoformat(), "is_completed": False}).execute()
                         st.rerun()
-                with col2.expander("Quick View Details"):
-                    st.write(f"**Current Notes:** {p.get('notes', 'None')}")
+                with col2.expander("Details"):
+                    st.write(f"**Notes:** {p.get('notes', 'None')}")
 
     with t_today:
         task_resp = supabase.table("tasks").select("*, prospects(*)").eq("is_completed", False).lte("due_date", today_str).order("due_date").execute()
@@ -151,7 +132,9 @@ elif page == "🏠 Pipeline":
                             if st.button("Save", key=f"up_{p_id}"):
                                 supabase.table("prospects").update({"stage": ns, "notes": nn}).eq("id", p_id).execute()
                                 st.rerun()
+                        # --- THE FIX: CASCADE DELETE ---
                         if c_d.button("🗑️", key=f"del_{p_id}"):
+                            supabase.table("tasks").delete().eq("prospect_id", p_id).execute()
                             supabase.table("prospects").delete().eq("id", p_id).execute()
                             st.rerun()
     except Exception as e: st.error(f"Error loading pipeline: {e}")
