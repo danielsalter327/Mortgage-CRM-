@@ -8,7 +8,7 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- STYLE ---
+# --- STYLING ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -30,15 +30,18 @@ COLOR_MAP = {"Potential Lead": "header-potential", "Started Application": "heade
 
 st.title("Mortgage CRM")
 
-# --- SECTION: GLOBAL TASKS ---
+# --- SECTION: GLOBAL TASKS (Aggressive Fetch) ---
 st.subheader("📋 Pending Tasks")
 try:
-    # We fetch only incomplete tasks
-    task_resp = supabase.table("tasks").select("*").eq("is_completed", False).execute()
-    tasks_data = task_resp.data
+    # We fetch ALL tasks from the table to see if anything is there
+    task_resp = supabase.table("tasks").select("*").execute()
+    all_tasks = task_resp.data
     
-    if tasks_data:
-        for t in tasks_data:
+    # Filter for incomplete ones in Python (bypassing DB filters for safety)
+    pending = [t for t in all_tasks if t.get('is_completed') == False]
+    
+    if pending:
+        for t in pending:
             with st.container(border=True):
                 col_t, col_b = st.columns([5, 1])
                 col_t.markdown(f"🔔 **ACTION:** {t['task_text']}")
@@ -46,9 +49,12 @@ try:
                     supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                     st.rerun()
     else:
-        st.info("No pending tasks. You're all caught up!")
+        st.info("No pending tasks. If you just added one, refresh the page.")
+        # Debugging line: tells us if there are ANY rows in the table at all
+        if len(all_tasks) > 0:
+            st.caption(f"Note: Found {len(all_tasks)} completed tasks in database.")
 except Exception as e:
-    st.error(f"Task Table Error: {e}")
+    st.error(f"Waiting for Supabase to sync... ({e})")
 
 st.markdown("---")
 
@@ -80,9 +86,9 @@ try:
                     
                     c_task, c_edit, c_del = st.columns([2, 1, 1])
                     with c_task.expander("➕ Add Task"):
-                        t_text = st.text_input("What needs to happen?", key=f"t_in_{p_id}")
-                        if st.button("Set Task", key=f"t_btn_{p_id}"):
-                            # FORCE 'is_completed' to False here
+                        t_text = st.text_input("Task detail", key=f"t_in_{p_id}")
+                        if st.button("Save Task", key=f"t_btn_{p_id}"):
+                            # We send it to the DB
                             supabase.table("tasks").insert({
                                 "prospect_id": p_id, 
                                 "task_text": t_text, 
@@ -100,5 +106,5 @@ try:
                     if c_del.button("🗑️", key=f"del_{p_id}"):
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
-except:
-    st.info("Pipeline is empty.")
+except Exception as e:
+    st.info("Pipeline is ready.")
