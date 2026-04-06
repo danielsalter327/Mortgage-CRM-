@@ -34,25 +34,25 @@ st.title("Mortgage CRM")
 # --- SECTION: GLOBAL TASKS ---
 st.subheader("📋 Pending Tasks")
 try:
-    # Fetch tasks and join with prospects
-    task_resp = supabase.table("tasks").select("*, prospects(name)").eq("is_completed", False).execute()
+    # SIMPLE FETCH: Just get the tasks. No fancy joins.
+    task_resp = supabase.table("tasks").select("*").eq("is_completed", False).execute()
     tasks_data = task_resp.data
     
     if tasks_data:
         for t in tasks_data:
             with st.container(border=True):
                 col_t, col_b = st.columns([5, 1])
-                p_info = t.get('prospects')
-                p_name = p_info.get('name', 'Unknown Lead') if p_info else "Unknown Lead"
+                # Show the task. We'll add the name back once we know this works.
+                col_t.markdown(f"🔔 **ACTION REQUIRED:** {t['task_text']}")
                 
-                col_t.markdown(f"**{p_name}**: {t['task_text']}")
                 if col_b.button("Done", key=f"done_{t['id']}"):
                     supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                     st.rerun()
     else:
         st.info("No pending tasks. You're all caught up!")
-except Exception:
-    st.caption("Tasks will appear here once the 'tasks' table is set up in Supabase.")
+except Exception as e:
+    # If this shows up, the table name 'tasks' is likely spelled wrong in Supabase
+    st.error(f"CRM could not find your 'tasks' table. Error: {e}")
 
 st.markdown("---")
 
@@ -97,7 +97,8 @@ try:
                     with c_task.expander("➕ Task"):
                         t_text = st.text_input("What's next?", key=f"t_in_{p_id}")
                         if st.button("Set", key=f"t_btn_{p_id}"):
-                            supabase.table("tasks").insert({"prospect_id": p_id, "task_text": t_text}).execute()
+                            # Inserting the task into Supabase
+                            supabase.table("tasks").insert({"prospect_id": p_id, "task_text": t_text, "is_completed": False}).execute()
                             st.rerun()
                     
                     with c_edit.expander("Update"):
@@ -110,5 +111,5 @@ try:
                     if c_del.button("🗑️", key=f"del_{p_id}"):
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
-except Exception:
-    st.info("Add a lead to get started.")
+except Exception as e:
+    st.info("Pipeline is ready for data.")
