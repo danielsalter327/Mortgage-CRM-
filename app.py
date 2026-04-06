@@ -9,17 +9,17 @@ supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="Mortgage CRM", layout="wide", page_icon="🏠")
 
-# --- STYLING ---
+# --- SHARED STYLING ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
-    h1 { font-weight: 800 !important; color: #111; letter-spacing: -1.5px; margin-bottom: 0px !important; }
+    h1 { font-weight: 800 !important; color: #111; letter-spacing: -1.5px; margin-bottom: 10px !important; }
     .header-potential { color: #E6B800; border-bottom: 2px solid #E6B800; font-weight: 700; margin-top: 2rem !important; }
     .header-started { color: #28a745; border-bottom: 2px solid #28a745; font-weight: 700; margin-top: 2rem !important; }
     .header-trid { color: #dc3545; border-bottom: 2px solid #dc3545; font-weight: 700; margin-top: 2rem !important; }
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
     
-    .task-box { background-color: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 5px; }
+    .task-box { background-color: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
     .task-potential { border-left: 6px solid #E6B800; }
     .task-started { border-left: 6px solid #28a745; }
     .task-trid { border-left: 6px solid #dc3545; }
@@ -37,105 +37,64 @@ MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Pr
 COLOR_MAP = {"Potential Lead": "header-potential", "Started Application": "header-started", "Trid Triggered": "header-trid", "In Processing": "header-processing"}
 TASK_COLOR_MAP = {"Potential Lead": "task-potential", "Started Application": "task-started", "Trid Triggered": "task-trid", "In Processing": "task-processing"}
 
-# Helper for US Date Formatting
 def fmt_date(iso_str):
     if not iso_str: return ""
     return datetime.strptime(iso_str, "%Y-%m-%d").strftime("%m/%d/%Y")
 
-st.title("Mortgage CRM")
+# --- SIDEBAR NAVIGATION ---
+with st.sidebar:
+    st.title("🏠 Menu")
+    page = st.radio("Go to:", ["📋 Tasks", "🏠 Pipeline", "➕ Add New Lead"])
+    st.markdown("---")
+    st.caption(f"Today: {date.today().strftime('%m/%d/%Y')}")
 
-# --- ADD NEW LEAD ---
-with st.expander("➕ CREATE NEW LEAD", expanded=False):
-    with st.form("new_lead_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        n, p = c1.text_input("Full Name"), c2.text_input("Phone")
-        s, note = c1.selectbox("Initial Status", MY_STATUSES), st.text_area("Notes")
-        if st.form_submit_button("Add Lead"):
-            if n and p:
-                supabase.table("prospects").insert({"name": n, "phone": p, "stage": s, "notes": note}).execute()
-                st.rerun()
+# --- PAGE 1: TASK DASHBOARD ---
+if page == "📋 Tasks":
+    st.title("Task Dashboard")
+    t_today, t_upcoming = st.tabs(["Due Today / Overdue", "Upcoming Schedule"])
+    today_str = date.today().isoformat()
 
-st.markdown("---")
-
-# --- TASK SECTION (TODAY & UPCOMING) ---
-st.subheader("📋 Task Dashboard")
-t_today, t_upcoming = st.tabs(["Due Today / Overdue", "Upcoming Schedule"])
-
-today_str = date.today().isoformat()
-
-# TAB 1: TODAY
-with t_today:
-    try:
+    with t_today:
         task_resp = supabase.table("tasks").select("*, prospects(*)").eq("is_completed", False).lte("due_date", today_str).order("due_date").execute()
         if task_resp.data:
             for t in task_resp.data:
                 p = t.get('prospects', {})
                 task_css = TASK_COLOR_MAP.get(p.get('stage'), "task-potential")
                 raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
-                
                 with st.container():
-                    st.markdown(f"""
-                        <div class="task-box {task_css}">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div>
-                                    <div style="font-weight: 700; color: #111;">{p.get('name')} <span style="color:red; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div>
-                                    <div style="font-size: 0.75rem; color: #888;">📍 {p.get('stage')}</div>
-                                    <div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div>
-                                </div>
-                                <a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    col1, col2, col3 = st.columns([1, 1, 4])
-                    if col1.button("Done", key=f"d_tod_{t['id']}"):
+                    st.markdown(f"""<div class="task-box {task_css}"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700; color: #111;">{p.get('name')} <span style="color:red; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div style="font-size: 0.75rem; color: #888;">📍 {p.get('stage')}</div><div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
+                    c1, c2 = st.columns([1, 5])
+                    if c1.button("Done", key=f"d_tod_{t['id']}"):
                         supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                         st.rerun()
-                    with col2.expander("Details"):
+                    with c2.expander("View Lead Details"):
                         st.write(f"**Lead Notes:** {p.get('notes', 'None')}")
         else:
             st.info("No tasks due today.")
-    except: st.caption("Loading tasks...")
 
-# TAB 2: UPCOMING
-with t_upcoming:
-    try:
+    with t_upcoming:
         future_resp = supabase.table("tasks").select("*, prospects(*)").eq("is_completed", False).gt("due_date", today_str).order("due_date").execute()
         if future_resp.data:
             for t in future_resp.data:
                 p = t.get('prospects', {})
                 raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
                 with st.container():
-                    st.markdown(f"""
-                        <div class="task-box" style="border-left: 6px solid #adb5bd;">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div>
-                                    <div style="font-weight: 700;">{p.get('name')} <span style="color:#666; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div>
-                                    <div><b>Task:</b> {t['task_text']}</div>
-                                </div>
-                                <a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    col1, col2 = st.columns([1, 5])
-                    with col1.expander("Details"):
-                        st.write(f"**Status:** {p.get('stage')}")
-                        st.write(f"**Lead Notes:** {p.get('notes', 'None')}")
+                    st.markdown(f"""<div class="task-box" style="border-left: 6px solid #adb5bd;"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700;">{p.get('name')} <span style="color:#666; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
+                    with st.expander("Details"):
+                        st.write(f"**Status:** {p.get('stage')} | **Notes:** {p.get('notes', 'None')}")
         else:
             st.info("No future tasks scheduled.")
-    except: st.caption("Loading upcoming...")
 
-st.markdown("---")
+# --- PAGE 2: PIPELINE ---
+elif page == "🏠 Pipeline":
+    st.title("Mortgage Pipeline")
+    search = st.text_input("", placeholder="🔍 Search leads...")
+    if 'filter' not in st.session_state: st.session_state.filter = "All"
+    f_cols = st.columns(len(MY_STATUSES) + 1)
+    if f_cols[0].button("All"): st.session_state.filter = "All"
+    for i, s in enumerate(MY_STATUSES):
+        if f_cols[i+1].button(s): st.session_state.filter = s
 
-# --- PIPELINE ---
-st.subheader("🏠 Pipeline")
-search = st.text_input("", placeholder="🔍 Search leads...")
-if 'filter' not in st.session_state: st.session_state.filter = "All"
-f_cols = st.columns(len(MY_STATUSES) + 1)
-if f_cols[0].button("Show All"): st.session_state.filter = "All"
-for i, s in enumerate(MY_STATUSES):
-    if f_cols[i+1].button(s): st.session_state.filter = s
-
-try:
     resp = supabase.table("prospects").select("*").order("name").execute()
     data = resp.data
     if search: data = [p for p in data if search.lower() in p.get('name', '').lower()]
@@ -166,4 +125,17 @@ try:
                     if c_d.button("🗑️", key=f"del_{p_id}"):
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
-except: st.info("Pipeline empty.")
+
+# --- PAGE 3: ADD NEW LEAD ---
+elif page == "➕ Add New Lead":
+    st.title("Create New Lead")
+    with st.form("new_lead_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        n, p = c1.text_input("Full Name"), c2.text_input("Phone")
+        s, note = c1.selectbox("Initial Status", MY_STATUSES), st.text_area("Notes")
+        if st.form_submit_button("Add to Pipeline"):
+            if n and p:
+                supabase.table("prospects").insert({"name": n, "phone": p, "stage": s, "notes": note}).execute()
+                st.success(f"Added {n}!")
+            else:
+                st.error("Name and Phone required.")
