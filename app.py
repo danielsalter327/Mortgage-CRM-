@@ -16,18 +16,18 @@ st.markdown("""
     h4 { margin-top: 2rem !important; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
     .status-card {
         background-color: white;
-        padding: 18px;
+        padding: 20px;
         border-radius: 12px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         border-left: 5px solid #1a1a1a;
     }
-    .phone-link { color: #007bff !important; text-decoration: none !important; font-weight: 600; font-size: 0.9rem; }
-    .stButton>button { border-radius: 8px; font-weight: 600; }
+    .phone-link { color: #007bff !important; text-decoration: none !important; font-weight: 600; font-size: 0.95rem; }
+    .notes-text { color: #555; font-size: 0.9rem; line-height: 1.4; font-style: italic; }
+    .stButton>button { border-radius: 8px; font-weight: 600; width: 100%; }
     </style>
     """, unsafe_allow_html=True)
 
-# THE SOURCE OF TRUTH FOR STATUSES
 MY_STATUSES = ["Potential Lead", "Started Application", "Trid Triggered", "In Processing"]
 
 st.title("Mortgage CRM")
@@ -51,7 +51,7 @@ with st.expander("➕ Add New Prospect"):
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# --- SECTION 2: PIPELINE (GROUPED VIEW) ---
+# --- SECTION 2: PIPELINE (DASHBOARD VIEW) ---
 search_query = st.text_input("", placeholder="🔍 Search prospects...")
 
 try:
@@ -64,7 +64,6 @@ if prospects:
     if search_query:
         prospects = [p for p in prospects if search_query.lower() in p.get('name', '').lower()]
 
-    # THIS PART RESTORES THE GROUPING
     for s in MY_STATUSES:
         stage_leads = [p for p in prospects if p.get('stage') == s]
         if stage_leads:
@@ -72,27 +71,40 @@ if prospects:
             for p in stage_leads:
                 p_id = p.get('id')
                 p_phone = p.get('phone', '')
+                p_notes = p.get('notes', 'No notes added yet.')
                 
                 with st.container():
-                    st.markdown(f"""
-                    <div class="status-card">
-                        <div style="font-size: 1.05rem; font-weight: 700;">{p.get('name')}</div>
-                        <a href="tel:{p_phone}" class="phone-link">📞 {p_phone}</a>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    col_edit, col_del = st.columns([5, 1])
-                    with col_edit.expander("View details & edit"):
-                        cur_stage = p.get('stage')
-                        s_idx = MY_STATUSES.index(cur_stage) if cur_stage in MY_STATUSES else 0
-                        new_stage = st.selectbox("Status", MY_STATUSES, index=s_idx, key=f"s_{p_id}")
-                        new_notes = st.text_area("Notes", value=p.get('notes', ''), key=f"n_{p_id}")
-                        if st.button("Update", key=f"up_{p_id}"):
-                            supabase.table("prospects").update({"stage": new_stage, "notes": new_notes}).eq("id", p_id).execute()
-                            st.rerun()
-                    
-                    if col_del.button("🗑️", key=f"del_{p_id}"):
-                        supabase.table("prospects").delete().eq("id", p_id).execute()
-                        st.rerun()
+                    # The Main Card Layout
+                    with st.container():
+                        # We use HTML for the card, but Streamlit Columns inside it for the data
+                        st.markdown(f'<div class="status-card">', unsafe_allow_html=True)
+                        
+                        col_info, col_notes, col_actions = st.columns([1, 2, 1])
+                        
+                        # Col 1: Contact Info
+                        with col_info:
+                            st.markdown(f"**{p.get('name')}**")
+                            st.markdown(f'<a href="tel:{p_phone}" class="phone-link">📞 {p_phone}</a>', unsafe_allow_html=True)
+                        
+                        # Col 2: The Notes (Utilizing that white space!)
+                        with col_notes:
+                            st.markdown(f'<div class="notes-text">📝 {p_notes}</div>', unsafe_allow_html=True)
+                        
+                        # Col 3: Quick Edit/Delete
+                        with col_actions:
+                            with st.expander("Update"):
+                                cur_stage = p.get('stage')
+                                s_idx = MY_STATUSES.index(cur_stage) if cur_stage in MY_STATUSES else 0
+                                new_stage = st.selectbox("Status", MY_STATUSES, index=s_idx, key=f"s_{p_id}")
+                                new_notes = st.text_area("Edit Notes", value=p.get('notes', ''), key=f"n_{p_id}")
+                                if st.button("Save", key=f"up_{p_id}"):
+                                    supabase.table("prospects").update({"stage": new_stage, "notes": new_notes}).eq("id", p_id).execute()
+                                    st.rerun()
+                            
+                            if st.button("🗑️", key=f"del_{p_id}"):
+                                supabase.table("prospects").delete().eq("id", p_id).execute()
+                                st.rerun()
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("No active prospects.")
