@@ -17,7 +17,10 @@ st.markdown("""
     .header-started { color: #28a745; border-bottom: 2px solid #28a745; font-weight: 700; margin-top: 2rem !important; }
     .header-trid { color: #dc3545; border-bottom: 2px solid #dc3545; font-weight: 700; margin-top: 2rem !important; }
     .header-processing { color: #007bff; border-bottom: 2px solid #007bff; font-weight: 700; margin-top: 2rem !important; }
+    
     .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .task-box { background-color: #fdfdfd; border: 1px solid #eee; border-left: 5px solid #0066ff; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+    
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
     .phone-link { color: #0066ff !important; text-decoration: none !important; font-weight: 600; font-size: 1rem; border: 1px solid #eef2ff; padding: 4px 8px; border-radius: 6px; background: #f8faff; }
     .notes-box { color: #555; font-size: 0.95rem; flex-grow: 1; border-left: 1px solid #eee; margin-left: 20px; padding-left: 20px; }
@@ -30,31 +33,43 @@ COLOR_MAP = {"Potential Lead": "header-potential", "Started Application": "heade
 
 st.title("Mortgage CRM")
 
-# --- SECTION: GLOBAL TASKS (Aggressive Fetch) ---
+# --- SECTION: GLOBAL TASKS ---
 st.subheader("📋 Pending Tasks")
 try:
-    # We fetch ALL tasks from the table to see if anything is there
-    task_resp = supabase.table("tasks").select("*").execute()
-    all_tasks = task_resp.data
+    # FETCH TASKS WITH LEAD DATA
+    task_resp = supabase.table("tasks").select("*, prospects(name, phone)").eq("is_completed", False).execute()
+    tasks_data = task_resp.data
     
-    # Filter for incomplete ones in Python (bypassing DB filters for safety)
-    pending = [t for t in all_tasks if t.get('is_completed') == False]
-    
-    if pending:
-        for t in pending:
-            with st.container(border=True):
-                col_t, col_b = st.columns([5, 1])
-                col_t.markdown(f"🔔 **ACTION:** {t['task_text']}")
-                if col_b.button("Done", key=f"done_{t['id']}"):
+    if tasks_data:
+        for t in tasks_data:
+            # Safely grab prospect info
+            p_info = t.get('prospects', {})
+            p_name = p_info.get('name', 'General Task')
+            p_phone = p_info.get('phone', '')
+            raw_phone = "".join(filter(str.isdigit, p_phone))
+
+            with st.container():
+                st.markdown(f"""
+                    <div class="task-box">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-weight: 700; color: #111;">{p_name}</span>: {t['task_text']}
+                            </div>
+                            <div>
+                                <a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700; margin-right: 15px;">📞 Call</a>
+                            </div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Mark as Done button
+                if st.button("Complete Task", key=f"done_{t['id']}"):
                     supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                     st.rerun()
     else:
-        st.info("No pending tasks. If you just added one, refresh the page.")
-        # Debugging line: tells us if there are ANY rows in the table at all
-        if len(all_tasks) > 0:
-            st.caption(f"Note: Found {len(all_tasks)} completed tasks in database.")
+        st.info("No pending tasks. You're all caught up!")
 except Exception as e:
-    st.error(f"Waiting for Supabase to sync... ({e})")
+    st.caption(f"Tasks pending setup: {e}")
 
 st.markdown("---")
 
@@ -88,7 +103,6 @@ try:
                     with c_task.expander("➕ Add Task"):
                         t_text = st.text_input("Task detail", key=f"t_in_{p_id}")
                         if st.button("Save Task", key=f"t_btn_{p_id}"):
-                            # We send it to the DB
                             supabase.table("tasks").insert({
                                 "prospect_id": p_id, 
                                 "task_text": t_text, 
