@@ -1,6 +1,6 @@
 import streamlit as st
 from supabase import create_client, Client
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # 1. Database Connection
 url = st.secrets["SUPABASE_URL"]
@@ -24,6 +24,7 @@ st.markdown("""
     .task-started { border-left: 6px solid #28a745; }
     .task-trid { border-left: 6px solid #dc3545; }
     .task-processing { border-left: 6px solid #007bff; }
+    .task-future-bar { border-left: 6px solid #adb5bd; }
     
     .crm-card { background-color: #fff; border: 1px solid #f0f0f0; border-radius: 12px; padding: 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .name-text { font-size: 1.1rem; font-weight: 700; color: #111; }
@@ -64,7 +65,7 @@ if page == "📋 Tasks":
                 with st.container():
                     st.markdown(f"""<div class="task-box {task_css}"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700; color: #111;">{p.get('name')} <span style="color:red; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div style="font-size: 0.75rem; color: #888;">📍 {p.get('stage')}</div><div style="margin-top: 5px;"><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
                     c1, c2 = st.columns([1, 5])
-                    if c1.button("Done", key=f"d_tod_{t['id']}"):
+                    if c1.button("Complete", key=f"d_tod_{t['id']}"):
                         supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
                         st.rerun()
                     with c2.expander("View Lead Details"):
@@ -73,19 +74,32 @@ if page == "📋 Tasks":
             st.info("No tasks due today.")
 
     with t_upcoming:
-        future_resp = supabase.table("tasks").select("*, prospects(*)").eq("is_completed", False).gt("due_date", today_str).order("due_date").execute()
+        # --- NEW DATE FILTER FOR UPCOMING ---
+        col_f1, col_f2 = st.columns([2, 3])
+        filter_date = col_f1.date_input("Filter by Date:", value=None, min_value=date.today() + timedelta(days=1))
+        
+        query = supabase.table("tasks").select("*, prospects(*)").eq("is_completed", False).gt("due_date", today_str).order("due_date")
+        if filter_date:
+            query = query.eq("due_date", filter_date.isoformat())
+        
+        future_resp = query.execute()
+        
         if future_resp.data:
             for t in future_resp.data:
                 p = t.get('prospects', {})
                 raw_phone = "".join(filter(str.isdigit, p.get('phone', '')))
                 with st.container():
-                    st.markdown(f"""<div class="task-box" style="border-left: 6px solid #adb5bd;"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700;">{p.get('name')} <span style="color:#666; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
-                    with st.expander("Details"):
+                    st.markdown(f"""<div class="task-box task-future-bar"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div style="font-weight: 700;">{p.get('name')} <span style="color:#666; font-size:0.8rem;">({fmt_date(t['due_date'])})</span></div><div><b>Task:</b> {t['task_text']}</div></div><a href="tel:{raw_phone}" style="text-decoration: none; color: #0066ff; font-weight: 700;">📞 {p.get('phone')}</a></div></div>""", unsafe_allow_html=True)
+                    c_f1, c_f2 = st.columns([1, 5])
+                    if c_f1.button("Complete", key=f"d_fut_{t['id']}"):
+                        supabase.table("tasks").update({"is_completed": True}).eq("id", t['id']).execute()
+                        st.rerun()
+                    with c_f2.expander("Details"):
                         st.write(f"**Status:** {p.get('stage')} | **Notes:** {p.get('notes', 'None')}")
         else:
-            st.info("No future tasks scheduled.")
+            st.info("No upcoming tasks found for this selection.")
 
-# --- PAGE 2: PIPELINE ---
+# --- PAGE 2: PIPELINE (Unchanged) ---
 elif page == "🏠 Pipeline":
     st.title("Mortgage Pipeline")
     search = st.text_input("", placeholder="🔍 Search leads...")
@@ -126,7 +140,7 @@ elif page == "🏠 Pipeline":
                         supabase.table("prospects").delete().eq("id", p_id).execute()
                         st.rerun()
 
-# --- PAGE 3: ADD NEW LEAD ---
+# --- PAGE 3: ADD NEW LEAD (Unchanged) ---
 elif page == "➕ Add New Lead":
     st.title("Create New Lead")
     with st.form("new_lead_form", clear_on_submit=True):
